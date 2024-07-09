@@ -1,4 +1,5 @@
 kaplay({
+  scale: 1,
   background: [141, 183, 255],
 });
 
@@ -7,7 +8,6 @@ layers(["bg", "obj", "ui"], "obj");
 
 // Load assets
 loadSprite("background", "/assets/sky.webp");
-loadSprite("bigyoshi", "/examples/sprites/YOSHI.png");
 loadSprite("bean", "/sprites/dino.png");
 loadSprite("bag", "/sprites/bag.png");
 loadSprite("ghosty", "/sprites/ghosty.png");
@@ -15,8 +15,8 @@ loadSprite("spike", "/sprites/spike.png");
 loadSprite("grass", "/sprites/grass.png");
 loadSprite("steel", "/sprites/steel.png");
 loadSprite("prize", "/sprites/jumpy.png");
-loadSprite("apple", "/sprites/egg_crack.png");
-loadSprite("portal", "/sprites/door.png");
+loadSprite("apple", "/examples/sprites/egg_crack.png");
+loadSprite("portal", "/examples/sprites/door.png");
 loadSprite("coin", "/sprites/coin.png");
 loadSound("coin", "/examples/sounds/score.mp3");
 loadSound("powerup", "/examples/sounds/powerup.mp3");
@@ -24,6 +24,29 @@ loadSound("blip", "/examples/sounds/blip.mp3");
 loadSound("hit", "/examples/sounds/hit.mp3");
 loadSound("portal", "/examples/sounds/portal.mp3");
 loadSound("bgSound", "/examples/sounds/backgroundMusic.mp3");
+loadSprite("dino", "/examples/sprites/dino.png", {
+  // The image contains 9 frames layed out horizontally, slice it into individual frames
+  sliceX: 9,
+  // Define animations
+  anims: {
+    idle: {
+      // Starts from frame 0, ends at frame 3
+      from: 0,
+      to: 3,
+      // Frame per second
+      speed: 5,
+      loop: true,
+    },
+    run: {
+      from: 4,
+      to: 7,
+      speed: 10,
+      loop: true,
+    },
+    // This animation only has 1 frame
+    jump: 8,
+  },
+});
 
 setGravity(3200);
 
@@ -48,7 +71,7 @@ function patrol(speed = 60, dir = 1) {
 function big() {
   let timer = 0;
   let isBig = false;
-  let destScale = 1;
+  let destScale = 2;
   return {
     id: "big",
     add() {
@@ -66,12 +89,12 @@ function big() {
       return isBig;
     },
     smallify() {
-      destScale = 1;
+      destScale = 2;
       timer = 0;
       isBig = false;
     },
     biggify(time) {
-      destScale = 2;
+      destScale = 2.5;
       timer = time;
       isBig = true;
     },
@@ -104,7 +127,7 @@ const LEVELS = [
     "        ^^                $",
     "           $$             $",
     "       ===          ===   $",
-    "  %   ====             =  $",
+    "  %   ====     =       =  $",
     "       ^^         =    =  $",
     "                      =    ",
     "       ^^      = >    =   @",
@@ -125,7 +148,7 @@ const LEVELS = [
     "              ---          ",
     "            $$             ",
     " %    ===   ===            ",
-    "            ^^         >   ",
+    "            ^^          >  ",
     "        ===  ===  ==  ^^   ",
     "      ^^          ===  === ",
     "====      ^^     =======   ",
@@ -155,6 +178,7 @@ const levelConf = {
       anchor("bot"),
       offscreen({ hide: true }),
       "platform",
+      scale(1, 1),
     ],
     "-": () => [
       sprite("steel"),
@@ -222,7 +246,6 @@ const levelConf = {
   },
 };
 
-// List of static questions
 const questions = [
   {
     question: "What has keys but can't open locks?",
@@ -273,7 +296,7 @@ function askQuestion(levelId, coins) {
 
   const questionBox = add([
     pos(0, 0),
-    rect(width(), 300), // Increased height for question and choices
+    rect(width(), 200), // Increased height for question and choices
     color(0, 0, 0),
     layer("ui"),
     fixed(),
@@ -321,15 +344,40 @@ scene("game", ({ levelId, coins } = { levelId: 0, coins: 0 }) => {
   const level = addLevel(LEVELS[levelId ?? 0], levelConf);
 
   // Define player object
+  // const player = add([
+  //   sprite("dino"),
+  //   pos(10, 10),
+  //   area(),
+  //   scale(10),
+  //   body(),
+  //   big(),
+  //   anchor("bot"),
+  // ]);
   const player = add([
-    sprite("bean"),
-    pos(0, 0),
+    sprite("dino"),
+    pos(10, 10),
+
     area(),
-    scale(1),
     body(),
+    scale(2.5),
     big(),
     anchor("bot"),
   ]);
+
+  // Switch to "idle" or "run" animation when player hits ground
+  player.onGround(() => {
+    if (!isKeyDown("left") && !isKeyDown("right")) {
+      player.play("idle");
+    } else {
+      player.play("run");
+    }
+  });
+
+  player.onAnimEnd((anim) => {
+    if (anim === "idle") {
+      // You can also register an event that runs when certain anim ends
+    }
+  });
 
   // Action() runs every frame
   player.onUpdate(() => {
@@ -429,15 +477,49 @@ scene("game", ({ levelId, coins } = { levelId: 0, coins: 0 }) => {
   }
 
   // Jump with space
-  onKeyPress("space", jump);
+  // onKeyPress("space", jump);
+  onKeyPress("space", () => {
+    if (player.isGrounded()) {
+      jump();
+      player.play("jump");
+    }
+  });
 
+  // onKeyDown("left", () => {
+  //   player.move(-MOVE_SPEED, 0);
+  // });
   onKeyDown("left", () => {
     player.move(-MOVE_SPEED, 0);
+    player.flipX = true;
+    // .play() will reset to the first frame of the anim, so we want to make sure it only runs when the current animation is not "run"
+    if (player.isGrounded() && player.curAnim() !== "run") {
+      player.play("run");
+    }
   });
 
   onKeyDown("right", () => {
     player.move(MOVE_SPEED, 0);
+    player.flipX = false;
+    if (player.isGrounded() && player.curAnim() !== "run") {
+      player.play("run");
+    }
   });
+  ["left", "right"].forEach((key) => {
+    onKeyRelease(key, () => {
+      // Only reset to "idle" if player is not holding any of these keys
+      if (player.isGrounded() && !isKeyDown("left") && !isKeyDown("right")) {
+        player.play("idle");
+      }
+    });
+  });
+  `
+  Anim: ${player.curAnim()}
+  Frame: ${player.frame}
+  `.trim();
+
+  // onKeyDown("right", () => {
+  //   player.move(MOVE_SPEED, 0);
+  // });
 
   onKeyPress("down", () => {
     player.weight = 3;
@@ -469,3 +551,4 @@ scene("win", () => {
 });
 
 go("game");
+// });

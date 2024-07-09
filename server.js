@@ -1,43 +1,44 @@
-import express from "express";
-import axios from "axios";
-import cors from "cors";
+const express = require("express");
+const cors = require("cors");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const app = express();
 const port = 3000;
 
-// Replace this with your actual OpenAI API key
-const openaiApiKey =
-  "sk-proj-Sy8YcMw2UFKNuQOb8nbcT3BlbkFJSCqHY5r30y8RtKZoQzWbY";
+// Replace this with your actual Google API key
+const apiKey = "AIzaSyCiJZnUte9xuH5Ob3bQ23UAlPgKhHu0gD0";
+
+const genAI = new GoogleGenerativeAI(apiKey);
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 app.use(cors());
 app.use(express.json());
 
-app.post("/get-question", async (req, res) => {
+app.post("/get-questions", async (req, res) => {
   try {
-    const response = await axios.post(
-      "https://api.openai.com/v1/completions",
-      {
-        model: "text-davinci-003",
-        prompt: "Give me a funny and thinkable question for a game:",
-        max_tokens: 50,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${openaiApiKey}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
+    const questions = [];
+    for (let i = 0; i < 5; i++) {
+      const prompt =
+        "Give me a funny and thinkable question for a game with three choices and the correct answer.";
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
 
-    const question = response.data.choices[0].text.trim();
-    res.json({ question });
+      const [question, ...choices] = text
+        .split("\n")
+        .filter((line) => line.trim() !== "");
+      const correct = choices.pop();
+      questions.push({
+        question: question.replace(/^Question: /, ""),
+        choices: choices.map((choice) => choice.replace(/^- /, "")),
+        correct: correct.replace(/^Correct answer: /, ""),
+      });
+    }
+
+    res.json({ questions });
   } catch (error) {
-    console.error("Error fetching question:", error);
-    console.error(
-      "Error details:",
-      error.response ? error.response.data : error.message
-    );
-    res.status(500).json({ error: "Failed to fetch question" });
+    console.error("Error fetching questions:", error);
+    res.status(500).json({ error: "Failed to fetch questions" });
   }
 });
 
