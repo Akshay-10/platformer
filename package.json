@@ -45,9 +45,12 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "build": "esbuild --bundle scripts/dev.js",
     "dev": "NODE_ENV=development node scripts/dev.js",
-    "bundle": "npm run build && mkdir -p dist && zip -r dist/game.zip www -x \"**/.DS_Store\""
+    "build": "node scripts/build.js",
+    "check": "tsc",
+    "fmt": "dprint fmt",
+    "prepare": "npm run build",
+    "publish:next": "npm publish --tag next"
   },
   "devDependencies": {
     "dprint": "^0.45.1",
