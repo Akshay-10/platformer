@@ -11,212 +11,208 @@ const distDir = "dist";
 const srcPath = `${srcDir}/kaboom.ts`;
 
 const fmts = [
-    {
-        format: "iife",
-        globalName: "kaplay",
-        outfile: `${distDir}/kaboom.js`,
-        footer: {
-            js: "window.kaboom = kaplay.default; window.kaplay = kaplay.default",
-        },
+  {
+    format: "iife",
+    globalName: "kaplay",
+    outfile: `${distDir}/kaboom.js`,
+    footer: {
+      js: "window.kaboom = kaplay.default; window.kaplay = kaplay.default",
     },
-    { format: "cjs", outfile: `${distDir}/kaboom.cjs` },
-    { format: "esm", outfile: `${distDir}/kaboom.mjs` },
+  },
+  { format: "cjs", outfile: `${distDir}/kaboom.cjs` },
+  { format: "esm", outfile: `${distDir}/kaboom.mjs` },
 ];
 
 /** @type {esbuild.BuildOptions} */
 const config = {
-    bundle: true,
-    sourcemap: true,
-    minify: true,
-    keepNames: true,
-    loader: {
-        ".png": "dataurl",
-        ".glsl": "text",
-        ".mp3": "binary",
-    },
-    entryPoints: [srcPath],
+  bundle: true,
+  sourcemap: true,
+  minify: true,
+  keepNames: true,
+  loader: {
+    ".png": "dataurl",
+    ".glsl": "text",
+    ".mp3": "binary",
+  },
+  entryPoints: [srcPath],
 };
 
 export async function build() {
-    return Promise.all(fmts.map((fmt) => {
-        return esbuild.build({
-            ...config,
-            ...fmt,
-        }).then(() => console.log(`-> ${fmt.outfile}`));
-    }));
+  return Promise.all(
+    fmts.map((fmt) => {
+      return esbuild
+        .build({
+          ...config,
+          ...fmt,
+        })
+        .then(() => console.log(`-> ${fmt.outfile}`));
+    })
+  );
 }
 
 export async function dev() {
-    // TODO: use esbuild serve?
-    serve();
-    const ctx = await esbuild.context({
-        ...config,
-        ...fmts[0],
-        minify: false,
-        plugins: [
-            {
-                name: "logger",
-                setup(b) {
-                    b.onEnd(() => {
-                        console.log(`-> ${fmts[0].outfile}`);
-                    });
-                },
-            },
-        ],
-    });
-    await ctx.watch();
+  // TODO: use esbuild serve?
+  serve();
+  const ctx = await esbuild.context({
+    ...config,
+    ...fmts[0],
+    minify: false,
+    plugins: [
+      {
+        name: "logger",
+        setup(b) {
+          b.onEnd(() => {
+            console.log(`-> ${fmts[0].outfile}`);
+          });
+        },
+      },
+    ],
+  });
+  await ctx.watch();
 }
 
 async function writeFile(path, content) {
-    await fs.writeFile(path, content);
-    console.log(`-> ${path}`);
+  await fs.writeFile(path, content);
+  console.log(`-> ${path}`);
 }
 
 export async function genDTS() {
-    // generate declaration files
-    esbuild.build({
-        bundle: true,
-        target: "esnext",
-        format: "esm",
-        entryPoints: ["./src/kaboom.ts"],
-        outdir: "./dist/declaration/",
-        plugins: [dTSPathAliasPlugin()],
-        loader: {
-            ".png": "dataurl",
-            ".glsl": "text",
-            ".mp3": "binary",
-        },
-    });
+  // generate declaration files
+  esbuild.build({
+    bundle: true,
+    target: "esnext",
+    format: "esm",
+    entryPoints: ["./src/kaboom.ts"],
+    outdir: "./dist/declaration/",
+    plugins: [dTSPathAliasPlugin()],
+    loader: {
+      ".png": "dataurl",
+      ".glsl": "text",
+      ".mp3": "binary",
+    },
+  });
 
-    // global dts
-    const dts = await fs.readFile(`${srcDir}/types.ts`, "utf-8");
+  // global dts
+  const dts = await fs.readFile(`${srcDir}/types.ts`, "utf-8");
 
-    const f = ts.createSourceFile(
-        "ts",
-        dts,
-        ts.ScriptTarget.Latest,
-        true,
-    );
+  const f = ts.createSourceFile("ts", dts, ts.ScriptTarget.Latest, true);
 
-    function transform(o, f) {
-        for (const k in o) {
-            if (o[k] == null) {
-                continue;
-            }
-            const v = f(k, o[k]);
-            if (v != null) {
-                o[k] = v;
-            } else {
-                delete o[k];
-            }
-            if (typeof o[k] === "object") {
-                transform(o[k], f);
-            }
-        }
-        return o;
+  function transform(o, f) {
+    for (const k in o) {
+      if (o[k] == null) {
+        continue;
+      }
+      const v = f(k, o[k]);
+      if (v != null) {
+        o[k] = v;
+      } else {
+        delete o[k];
+      }
+      if (typeof o[k] === "object") {
+        transform(o[k], f);
+      }
     }
+    return o;
+  }
 
-    // transform and prune typescript ast to a format more meaningful to us
-    const stmts = transform(f.statements, (k, v) => {
-        switch (k) {
-            case "end":
-            case "flags":
-            case "parent":
-            case "modifiers":
-            case "transformFlags":
-            case "modifierFlagsCache":
-                return;
-            case "name":
-            case "typeName":
-            case "tagName":
-                return v.escapedText;
-            case "pos":
-                return typeof v === "number" ? undefined : v;
-            case "kind":
-                return ts.SyntaxKind[v];
-            case "questionToken":
-                return true;
-            case "members": {
-                const members = {};
-                for (const mem of v) {
-                    const name = mem.name?.escapedText;
-                    if (!name || name === "toString") {
-                        continue;
-                    }
-                    if (!members[name]) {
-                        members[name] = [];
-                    }
-                    members[name].push(mem);
-                }
-                return members;
-            }
-            case "jsDoc": {
-                const doc = v[0];
-                const taglist = doc.tags ?? [];
-                const tags = {};
-                for (const tag of taglist) {
-                    const name = tag.tagName.escapedText;
-                    if (!tags[name]) {
-                        tags[name] = [];
-                    }
-                    tags[name].push(tag.comment);
-                }
-                return {
-                    doc: doc.comment,
-                    tags: tags,
-                };
-            }
-            default:
-                return v;
+  // transform and prune typescript ast to a format more meaningful to us
+  const stmts = transform(f.statements, (k, v) => {
+    switch (k) {
+      case "end":
+      case "flags":
+      case "parent":
+      case "modifiers":
+      case "transformFlags":
+      case "modifierFlagsCache":
+        return;
+      case "name":
+      case "typeName":
+      case "tagName":
+        return v.escapedText;
+      case "pos":
+        return typeof v === "number" ? undefined : v;
+      case "kind":
+        return ts.SyntaxKind[v];
+      case "questionToken":
+        return true;
+      case "members": {
+        const members = {};
+        for (const mem of v) {
+          const name = mem.name?.escapedText;
+          if (!name || name === "toString") {
+            continue;
+          }
+          if (!members[name]) {
+            members[name] = [];
+          }
+          members[name].push(mem);
         }
-    });
-
-    // check if global defs are being generated
-    let globalGenerated = false;
-
-    // generate global decls for KaboomCtx members
-    let globalDts = "";
-
-    globalDts += "import { KaboomCtx } from \"./types\"\n";
-    globalDts += "declare global {\n";
-
-    for (const stmt of stmts) {
-        if (stmt.name === "KaboomCtx") {
-            if (stmt.kind !== "InterfaceDeclaration") {
-                throw new Error("KaboomCtx must be an interface.");
-            }
-            for (const name in stmt.members) {
-                globalDts += `\tconst ${name}: KaboomCtx["${name}"]\n`;
-            }
-            globalGenerated = true;
+        return members;
+      }
+      case "jsDoc": {
+        const doc = v[0];
+        const taglist = doc.tags ?? [];
+        const tags = {};
+        for (const tag of taglist) {
+          const name = tag.tagName.escapedText;
+          if (!tags[name]) {
+            tags[name] = [];
+          }
+          tags[name].push(tag.comment);
         }
+        return {
+          doc: doc.comment,
+          tags: tags,
+        };
+      }
+      default:
+        return v;
     }
+  });
 
-    globalDts += "}\n";
+  // check if global defs are being generated
+  let globalGenerated = false;
 
-    if (!globalGenerated) {
-        throw new Error("KaboomCtx not found, failed to generate global defs.");
+  // generate global decls for KaboomCtx members
+  let globalDts = "";
+
+  globalDts += 'import { KaboomCtx } from "./types"\n';
+  globalDts += "declare global {\n";
+
+  for (const stmt of stmts) {
+    if (stmt.name === "KaboomCtx") {
+      if (stmt.kind !== "InterfaceDeclaration") {
+        throw new Error("KaboomCtx must be an interface.");
+      }
+      for (const name in stmt.members) {
+        globalDts += `\tconst ${name}: KaboomCtx["${name}"]\n`;
+      }
+      globalGenerated = true;
     }
+  }
 
-    writeFile(`${distDir}/declaration/global.d.ts`, globalDts);
-    writeFile(`${distDir}/declaration/global.js`, "");
+  globalDts += "}\n";
+
+  if (!globalGenerated) {
+    throw new Error("KaboomCtx not found, failed to generate global defs.");
+  }
+
+  writeFile(`${distDir}/declaration/global.d.ts`, globalDts);
+  writeFile(`${distDir}/declaration/global.js`, "");
 }
 
 export function serve(opt = {}) {
-    const port = opt.port || process.env.PORT || 8000;
-    const app = express();
+  const port = opt.port || process.env.PORT || 8000;
+  const app = express();
 
-    app.use(express.static("assets"));
-    app.use("/dist", express.static("dist"));
-    app.use("/sprites", express.static("sprites"));
-    app.use("/examples", express.static("examples"));
+  app.use(express.static("assets"));
+  app.use("/dist", express.static("dist"));
+  app.use("/sprites", express.static("sprites"));
+  app.use("/examples", express.static("examples"));
 
-    app.get("/", async (req, res) => {
-        const examples = (await fs.readdir("examples"))
-            .filter((p) => !p.startsWith(".") && p.endsWith(".js"))
-            .map((d) => path.basename(d, ".js"));
-        res.setHeader("Content-Type", "text/html");
-        res.send(`
+  app.get("/", async (req, res) => {
+    res.setHeader("Content-Type", "text/html");
+    res.send(`
     <!DOCTYPE html>
     <html>
     <head>
@@ -245,25 +241,22 @@ export function serve(opt = {}) {
     </style>
     </head>
     <body>
-    ${
-            examples.map((example) =>
-                `<li><a href="/${example}">${example}</a></li>`
-            ).join("")
-        }
+   <li><a href="/platformer">platformer</a></li>
+     
     </body>
     </html>
     		`);
-    });
+  });
 
-    app.get("/:name", async (req, res) => {
-        const name = req.params.name;
-        if (!await isFile(`examples/${name}.js`)) {
-            res.status(404);
-            res.send(`example not found: ${name}`);
-            return;
-        }
-        res.setHeader("Content-Type", "text/html");
-        res.send(`
+  app.get("/:name", async (req, res) => {
+    const name = req.params.name;
+    if (!(await isFile(`examples/${name}.js`))) {
+      res.status(404);
+      res.send(`example not found: ${name}`);
+      return;
+    }
+    res.setHeader("Content-Type", "text/html");
+    res.send(`
     <!DOCTYPE html>
     <html>
     <head>
@@ -274,35 +267,35 @@ export function serve(opt = {}) {
     </body>
     </html>
     		`);
-    });
+  });
 
-    return app.listen(port, () => {
-        console.log(`server started at http://localhost:${port}`);
-    });
+  return app.listen(port, () => {
+    console.log(`server started at http://localhost:${port}`);
+  });
 }
 
 export const isWindows = /^win/.test(process.platform);
 export const c = (n, msg) => `\x1b[${n}m${msg}\x1b[0m`;
 export const wait = (time) =>
-    new Promise((resolve) => setTimeout(() => resolve(), time));
+  new Promise((resolve) => setTimeout(() => resolve(), time));
 export const exec = async (cmd, args, opts) =>
-    new Promise((resolve, reject) => {
-        const proc = cp.spawn(isWindows ? cmd + ".cmd" : cmd, args, opts);
-        proc.on("exit", resolve);
-        proc.on("error", reject);
-    });
+  new Promise((resolve, reject) => {
+    const proc = cp.spawn(isWindows ? cmd + ".cmd" : cmd, args, opts);
+    proc.on("exit", resolve);
+    proc.on("error", reject);
+  });
 export const exists = (path) =>
-    fs
-        .access(path)
-        .then(() => true)
-        .catch(() => false);
+  fs
+    .access(path)
+    .then(() => true)
+    .catch(() => false);
 export const isFile = (path) =>
-    fs
-        .stat(path)
-        .then((stat) => stat.isFile())
-        .catch(() => false);
+  fs
+    .stat(path)
+    .then((stat) => stat.isFile())
+    .catch(() => false);
 export const isDir = (path) =>
-    fs
-        .stat(path)
-        .then((stat) => stat.isDirectory())
-        .catch(() => false);
+  fs
+    .stat(path)
+    .then((stat) => stat.isDirectory())
+    .catch(() => false);

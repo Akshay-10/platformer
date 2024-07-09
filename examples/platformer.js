@@ -6,22 +6,24 @@ kaplay({
 layers(["bg", "obj", "ui"], "obj");
 
 // Load assets
+loadSprite("background", "/assets/sky.webp");
 loadSprite("bigyoshi", "/examples/sprites/YOSHI.png");
-loadSprite("bean", "/sprites/bean.png");
+loadSprite("bean", "/sprites/dino.png");
 loadSprite("bag", "/sprites/bag.png");
 loadSprite("ghosty", "/sprites/ghosty.png");
 loadSprite("spike", "/sprites/spike.png");
 loadSprite("grass", "/sprites/grass.png");
 loadSprite("steel", "/sprites/steel.png");
 loadSprite("prize", "/sprites/jumpy.png");
-loadSprite("apple", "/sprites/apple.png");
-loadSprite("portal", "/sprites/portal.png");
+loadSprite("apple", "/sprites/egg_crack.png");
+loadSprite("portal", "/sprites/door.png");
 loadSprite("coin", "/sprites/coin.png");
 loadSound("coin", "/examples/sounds/score.mp3");
 loadSound("powerup", "/examples/sounds/powerup.mp3");
 loadSound("blip", "/examples/sounds/blip.mp3");
 loadSound("hit", "/examples/sounds/hit.mp3");
 loadSound("portal", "/examples/sounds/portal.mp3");
+loadSound("bgSound", "/examples/sounds/backgroundMusic.mp3");
 
 setGravity(3200);
 
@@ -306,6 +308,15 @@ function askQuestion(levelId, coins) {
 }
 
 scene("game", ({ levelId, coins } = { levelId: 0, coins: 0 }) => {
+  play("bgSound", {
+    loop: true,
+    volume: 0.5,
+  });
+  add([
+    sprite("background", { width: 500, height: 500 }),
+    pos(0, 0),
+    layer("bg"),
+  ]);
   // Add level to scene
   const level = addLevel(LEVELS[levelId ?? 0], levelConf);
 
