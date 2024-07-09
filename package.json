@@ -45,15 +45,9 @@
     "CHANGELOG.md"
   ],
   "scripts": {
+    "build": "esbuild --bundle scripts/dev.js",
     "dev": "NODE_ENV=development node scripts/dev.js",
-    "win:dev": "set NODE_ENV=development && node scripts/dev.js",
-    "build": "node scripts/build.js",
-    "check": "tsc",
-    "fmt": "dprint fmt",
-    "test": "node scripts/test.js",
-    "desktop": "tauri dev",
-    "prepare": "npm run build",
-    "publish:next": "npm publish --tag next"
+    "bundle": "npm run build && mkdir -p dist && zip -r dist/game.zip www -x \"**/.DS_Store\""
   },
   "devDependencies": {
     "dprint": "^0.45.1",
