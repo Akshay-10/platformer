@@ -41,6 +41,7 @@
   "files": [
     "dist/",
     "src/",
+    "public/",
     "kaboom.png",
     "CHANGELOG.md"
   ],
